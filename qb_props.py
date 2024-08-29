@@ -180,12 +180,23 @@ final_data = qb_data.merge(season_pass, on=['player_id', 'season'], suffixes=(''
 print(f"After first merge shape: {final_data.shape}")
 
 print(f"Top receivers shape: {top_receivers.shape}")
-final_data = final_data.merge(top_receivers, left_on=['season', 'week', 'recent_team'], right_on=['season', 'week', 'team'])
+final_data = final_data.merge(top_receivers, left_on=['season', 'week', 'recent_team'], right_on=['season', 'week', 'team'], suffixes=('', '_receiver'))
 print(f"After second merge shape: {final_data.shape}")
 
 print(f"Defense stats shape: {defense_stats.shape}")
-final_data = final_data.merge(defense_stats, left_on=['season', 'opponent_team'], right_on=['season', 'team'])
+final_data = final_data.merge(defense_stats, left_on=['season', 'opponent_team'], right_on=['season', 'team'], suffixes=('', '_defense'))
 print(f"After final merge shape: {final_data.shape}")
+
+# Remove duplicate columns and rename as needed
+columns_to_drop = [col for col in final_data.columns if col.endswith('_x') or col.endswith('_y')]
+final_data = final_data.drop(columns=columns_to_drop)
+
+# Rename any remaining problematic columns
+column_rename_map = {
+    'team_receiver': 'team',
+    'team_defense': 'opponent_team'
+}
+final_data = final_data.rename(columns=column_rename_map)
 
 print(f"Final data columns: {final_data.columns.tolist()}")
 
@@ -223,3 +234,72 @@ final_dataset = final_data[columns_to_keep]
 final_dataset.to_csv('nfl_qb_prediction_dataset.csv', index=False)
 
 print("Dataset creation completed. Saved as 'nfl_qb_prediction_dataset.csv'")
+
+# Add XGBoost model with GridSearch
+print("Training XGBoost model with GridSearch...")
+
+import xgboost as xgb
+from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.preprocessing import StandardScaler
+
+# Prepare the data
+X = final_dataset.drop(['player_id', 'player_name', 'season', 'week', 'passing_yards'], axis=1)
+y = final_dataset['passing_yards']
+
+# Handle missing values
+X = X.fillna(X.mean())
+
+# Split the data
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Scale the features
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
+
+# Define the parameter grid
+param_grid = {
+    'max_depth': [3, 5, 7],
+    'learning_rate': [0.01, 0.1, 0.3],
+    'n_estimators': [100, 200, 300],
+    'min_child_weight': [1, 3, 5],
+    'subsample': [0.8, 0.9, 1.0],
+    'colsample_bytree': [0.8, 0.9, 1.0]
+}
+
+# Create the XGBoost regressor
+xgb_model = xgb.XGBRegressor(objective='reg:squarederror', random_state=42)
+
+# Perform GridSearch
+grid_search = GridSearchCV(estimator=xgb_model, param_grid=param_grid, 
+                           cv=3, n_jobs=-1, verbose=2, scoring='neg_mean_squared_error')
+grid_search.fit(X_train_scaled, y_train)
+
+# Get the best model
+best_model = grid_search.best_estimator_
+
+# Make predictions
+y_pred = best_model.predict(X_test_scaled)
+
+# Calculate metrics
+mse = mean_squared_error(y_test, y_pred)
+r2 = r2_score(y_test, y_pred)
+
+print(f"Best parameters: {grid_search.best_params_}")
+print(f"Mean Squared Error: {mse}")
+print(f"R-squared Score: {r2}")
+
+# Feature importance
+feature_importance = best_model.feature_importances_
+feature_names = X.columns
+feature_importance_dict = dict(zip(feature_names, feature_importance))
+sorted_features = sorted(feature_importance_dict.items(), key=lambda x: x[1], reverse=True)
+
+print("\nTop 10 Most Important Features:")
+for feature, importance in sorted_features[:10]:
+    print(f"{feature}: {importance}")
+
+# Save the model
+best_model.save_model('qb_passing_yards_model.json')
+print("Model saved as 'qb_passing_yards_model.json'")
