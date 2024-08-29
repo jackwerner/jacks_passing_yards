@@ -94,9 +94,17 @@ receiver_data = snap_counts.merge(rec_stats[['player_id', 'season', 'team', 'sea
                                   on=['player_id', 'season', 'team'],
                                   how='left')
 
+# After loading and processing receiver data
+print("Receiver data sample:")
+print(receiver_data[['player_id', 'season', 'team', 'season_rec_targets_p_game', 'season_rec_p_game']].head())
+
 # Get top 3 receivers by offense_pct for each team, season, and week
 print("Identifying top 3 receivers for each game...")
 top_receivers = receiver_data.sort_values('offense_pct', ascending=False).groupby(['season', 'week', 'team']).head(3)
+
+# After creating top_receivers DataFrame
+print("Top receivers sample:")
+print(top_receivers[['season', 'week', 'team', 'player_id', 'season_rec_targets_p_game']].head())
 
 # Create columns for each of the top 3 receivers' stats
 receiver_stats = ['season_rec_targets_p_game', 'season_rec_p_game', 'season_rec_p_target', 'season_rec_yards_p_game', 
@@ -179,10 +187,29 @@ print(f"Season pass shape: {season_pass.shape}")
 final_data = qb_data.merge(season_pass, on=['player_id', 'season'], suffixes=('', '_season'))
 print(f"After first merge shape: {final_data.shape}")
 
-print(f"Top receivers shape: {top_receivers.shape}")
-final_data = final_data.merge(top_receivers, left_on=['season', 'week', 'recent_team'], right_on=['season', 'week', 'team'], suffixes=('', '_receiver'))
-print(f"After second merge shape: {final_data.shape}")
+# Modify the merge with top_receivers
+print("Merging QB data with top receivers...")
+final_data = final_data.merge(top_receivers, 
+                              left_on=['season', 'week', 'recent_team'], 
+                              right_on=['season', 'week', 'team'], 
+                              how='left',  # Change to left join
+                              suffixes=('', '_receiver'))
+print(f"After merging with top receivers shape: {final_data.shape}")
 
+# Check for missing values in receiver columns
+receiver_columns = [col for col in final_data.columns if col.startswith('WR_')]
+missing_receiver_data = final_data[receiver_columns].isnull().sum()
+print("Missing values in receiver columns:")
+print(missing_receiver_data)
+
+# Handle missing values for receiver stats
+for col in receiver_columns:
+    if col.endswith('player_id'):
+        final_data[col] = final_data[col].fillna('Unknown')
+    else:
+        final_data[col] = final_data[col].fillna(final_data[col].mean())
+
+print(f"Top receivers shape: {top_receivers.shape}")
 print(f"Defense stats shape: {defense_stats.shape}")
 final_data = final_data.merge(defense_stats, left_on=['season', 'opponent_team'], right_on=['season', 'team'], suffixes=('', '_defense'))
 print(f"After final merge shape: {final_data.shape}")
@@ -230,6 +257,10 @@ if missing_columns:
 
 final_dataset = final_data[columns_to_keep]
 
+# Before saving the final dataset
+print("Final dataset sample:")
+print(final_dataset[['player_id', 'player_name', 'season', 'week', 'WR_1_player_id', 'WR_1_season_rec_targets_p_game']].head())
+
 # Save the final dataset
 final_dataset.to_csv('nfl_qb_prediction_dataset.csv', index=False)
 
@@ -244,7 +275,7 @@ from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.preprocessing import StandardScaler
 
 # Prepare the data
-X = final_dataset.drop(['player_id', 'player_name', 'season', 'week', 'passing_yards'], axis=1)
+X = final_dataset.drop(['player_id', 'player_name', 'season', 'week', 'passing_yards', 'WR_1_player_id', 'WR_2_player_id', 'WR_3_player_id'], axis=1)
 y = final_dataset['passing_yards']
 
 # Handle missing values
