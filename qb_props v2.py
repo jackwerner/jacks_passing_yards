@@ -298,10 +298,12 @@ columns_to_keep = [
     'WR_2_season_broken_tackle_p_game', 'WR_2_season_drop_percent', 'WR_2_season_int_p_target', 'WR_2_season_adot',
     'WR_3_player_id', 'WR_3_season_rec_targets_p_game', 'WR_3_season_rec_p_game', 'WR_3_season_rec_p_target',
     'WR_3_season_rec_yards_p_game', 'WR_3_season_ybc_p_r', 'WR_3_season_yac_p_r', 'WR_3_season_broken_tackle_p_game',
-    'WR_3_season_drop_percent', 'WR_3_season_int_p_target', 'WR_3_season_adot', 'def_interceptions', 'def_yards', 'def_td',
-    'def_sacks', 'def_combined_tackles'
+    'WR_3_season_drop_percent', 'WR_3_season_int_p_target', 'WR_3_season_adot', 'def_interceptions', 'def_targets', 'def_completions', 'def_yards', 'def_td',
+    'def_rating', 'def_dadot', 'def_air_yards', 'def_yards_after_catch',
+    'def_blitz', 'def_hurry', 'def_qbkd', 'def_sacks', 'def_pressures',
+    'def_combined_tackles', 'def_missed_tackles', 'def_cmp_percent',
+    'def_yards_per_cmp', 'def_yards_per_tgt', 'def_missed_tackle_percent'
 ]
-
 # Check if all columns in columns_to_keep exist in final_data
 missing_columns = [col for col in columns_to_keep if col not in final_data.columns]
 if missing_columns:
@@ -386,3 +388,5 @@ for feature, importance in sorted_features[:10]:
 # Save the model
 best_model.save_model('qb_passing_yards_model_v2.json')
 print("Model saved as 'qb_passing_yards_model_v2.json'")
+
+
