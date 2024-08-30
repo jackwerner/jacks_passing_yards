@@ -3,6 +3,8 @@ import numpy as np
 from urllib.parse import urljoin
 import urllib.error
 import logging
+from sklearn.preprocessing import StandardScaler
+import joblib
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -343,6 +345,10 @@ scaler = StandardScaler()
 X_train_scaled = scaler.fit_transform(X_train)
 X_test_scaled = scaler.transform(X_test)
 
+# Save the scaler
+joblib.dump(scaler, 'qb_passing_yards_scaler_v2.joblib')
+print("Scaler saved as 'qb_passing_yards_scaler_v2.joblib'")
+
 # Define the parameter grid
 param_grid = {
     'max_depth': [3, 5, 7],
@@ -374,6 +380,28 @@ r2 = r2_score(y_test, y_pred)
 print(f"Best parameters: {grid_search.best_params_}")
 print(f"Mean Squared Error: {mse}")
 print(f"R-squared Score: {r2}")
+
+# Add this new section for plotting
+import matplotlib.pyplot as plt
+
+# Create the scatter plot
+plt.figure(figsize=(10, 10))
+plt.scatter(y_test, y_pred, alpha=0.5)
+plt.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'r--', lw=2)
+
+plt.xlabel('Actual Passing Yards')
+plt.ylabel('Predicted Passing Yards')
+plt.title('Actual vs Predicted Passing Yards')
+
+# Add text for MSE and R-squared
+plt.text(0.05, 0.95, f'MSE: {mse:.2f}', transform=plt.gca().transAxes)
+plt.text(0.05, 0.90, f'R-squared: {r2:.2f}', transform=plt.gca().transAxes)
+
+plt.tight_layout()
+plt.savefig('actual_vs_predicted_passing_yards.png')
+plt.close()
+
+print("Scatter plot saved as 'actual_vs_predicted_passing_yards.png'")
 
 # Feature importance
 feature_importance = best_model.feature_importances_

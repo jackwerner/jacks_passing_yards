@@ -7,6 +7,7 @@ import json
 import urllib.error
 import warnings
 import numpy as np
+import joblib
 
 warnings.filterwarnings("ignore", category=RuntimeWarning, message="invalid value encountered in scalar divide")
 
@@ -100,6 +101,15 @@ try:
 except Exception as e:
     print(f"Error loading the model: {e}")
     print("Please ensure the model file 'qb_passing_yards_model_v2.json' exists and is valid.")
+    exit(1)
+
+# Load the scaler
+try:
+    scaler = joblib.load('qb_passing_yards_scaler_v2.joblib')
+    print("Scaler loaded successfully.")
+except Exception as e:
+    print(f"Error loading the scaler: {e}")
+    print("Please ensure the scaler file 'qb_passing_yards_scaler_v2.joblib' exists and is valid.")
     exit(1)
 
 # Load weekly QB passing data (2023)
@@ -201,7 +211,7 @@ def predict_passing_yards(qb_name, wr1_name, wr2_name, wr3_name, opponent_team):
     wr1_stats = get_player_stats(wr1_id, 'WR')
     wr2_stats = get_player_stats(wr2_id, 'WR')
     wr3_stats = get_player_stats(wr3_id, 'WR')
-    defense_stats = get_defense_stats(opponent_team)
+    defense_stats = get_defense_stats(opponent_team).drop('tm')
 
     # Prepare input data
     input_data = pd.DataFrame({
@@ -217,25 +227,28 @@ def predict_passing_yards(qb_name, wr1_name, wr2_name, wr3_name, opponent_team):
             print(f"Feature {feature} not found in input data.")
             input_data[feature] = 0
 
+    # Scale the input data
+    input_data_scaled = pd.DataFrame(scaler.transform(input_data), columns=input_data.columns)
+
     # Reorder columns to match the expected feature order
-    input_data = input_data[expected_features['all']]
+    input_data_scaled = input_data_scaled[expected_features['all']]
 
     # Print defensive stats and final input data for debugging
     # print("Defensive stats for", opponent_team, ":", defense_stats.to_dict())
     # print("Final input data:")
-    # print(input_data)
+    # print(input_data_scaled)
 
     # Make prediction
-    prediction = model.predict(input_data)
+    prediction = model.predict(input_data_scaled)
 
     return prediction[0]
 
 # Example usage
-qb_name = "Daniel Jones"
+qb_name = "Jalen Hurts"
 wr1_name = "A.J. Brown"
 wr2_name = "DeVonta Smith"
 wr3_name = "Saquon Barkley"
-opponent_team = "KC"
+opponent_team = "GB"
 
 predicted_yards = predict_passing_yards(qb_name, wr1_name, wr2_name, wr3_name, opponent_team)
 print(f"Predicted passing yards for {qb_name}: {predicted_yards:.2f}")
