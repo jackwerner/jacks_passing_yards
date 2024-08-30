@@ -5,6 +5,10 @@ import xgboost as xgb
 from sklearn.preprocessing import StandardScaler
 import json
 import urllib.error
+import warnings
+import numpy as np
+
+warnings.filterwarnings("ignore", category=RuntimeWarning, message="invalid value encountered in scalar divide")
 
 # Base URL for the data files
 base_url = "https://github.com/nflverse/nflverse-data/releases/download/"
@@ -50,8 +54,26 @@ def load_defense_stats():
     defense_stats['def_yards_per_tgt'] = np.where(defense_stats['tgt'] != 0, defense_stats['yds'] / defense_stats['tgt'], 0)
     defense_stats['def_missed_tackle_percent'] = np.where(defense_stats['comb'] != 0, defense_stats['m_tkl'] / defense_stats['comb'], 0)
     
+    defense_stats = defense_stats.rename(columns={
+    'int': 'def_interceptions',
+    'tgt': 'def_targets',
+    'cmp': 'def_completions',
+    'yds': 'def_yards',
+    'td': 'def_td',
+    'rat': 'def_rating',
+    'dadot': 'def_dadot',
+    'air': 'def_air_yards',
+    'yac': 'def_yards_after_catch',
+    'bltz': 'def_blitz',
+    'hrry': 'def_hurry',
+    'qbkd': 'def_qbkd',
+    'sk': 'def_sacks',
+    'prss': 'def_pressures',
+    'comb': 'def_combined_tackles',
+    'm_tkl': 'def_missed_tackles'
+    })
     # Rename columns to add 'def_' prefix
-    defense_stats.columns = ['team' if col == 'tm' else f'def_{col}' for col in defense_stats.columns]
+    # defense_stats.columns = ['team' if col == 'tm' else f'def_{col}' for col in defense_stats.columns]
     
     return defense_stats
 
@@ -60,7 +82,7 @@ defense_stats = load_defense_stats()
 
 def get_defense_stats(team):
     """Get the defensive stats for the opponent team."""
-    team_stats = defense_stats[defense_stats['team'] == team]
+    team_stats = defense_stats[defense_stats['tm'] == team]
     if team_stats.empty:
         raise ValueError(f"No defensive stats found for team: {team}")
     return team_stats.iloc[0]
@@ -183,20 +205,25 @@ def predict_passing_yards(qb_name, wr1_name, wr2_name, wr3_name, opponent_team):
 
     # Prepare input data
     input_data = pd.DataFrame({
-        **qb_stats,
+        **qb_stats.to_dict(),
         **{f'WR_1_{k}': v for k, v in wr1_stats.items()},
         **{f'WR_2_{k}': v for k, v in wr2_stats.items()},
         **{f'WR_3_{k}': v for k, v in wr3_stats.items()},
-        **{k: v for k, v in defense_stats.items() if k != 'team'}
+        **defense_stats.to_dict()  # Include all defense stats directly
     }, index=[0])
-
     # Ensure all expected features are present
     for feature in expected_features['all']:
         if feature not in input_data.columns:
+            print(f"Feature {feature} not found in input data.")
             input_data[feature] = 0
 
     # Reorder columns to match the expected feature order
     input_data = input_data[expected_features['all']]
+
+    # Print defensive stats and final input data for debugging
+    # print("Defensive stats for", opponent_team, ":", defense_stats.to_dict())
+    # print("Final input data:")
+    # print(input_data)
 
     # Make prediction
     prediction = model.predict(input_data)
@@ -204,11 +231,11 @@ def predict_passing_yards(qb_name, wr1_name, wr2_name, wr3_name, opponent_team):
     return prediction[0]
 
 # Example usage
-qb_name = "Patrick Mahomes"
-wr1_name = "Zay Flowers"
-wr2_name = "Mark Andrews"
-wr3_name = "Rashod Bateman"
-opponent_team = "BAL"
+qb_name = "Daniel Jones"
+wr1_name = "A.J. Brown"
+wr2_name = "DeVonta Smith"
+wr3_name = "Saquon Barkley"
+opponent_team = "KC"
 
 predicted_yards = predict_passing_yards(qb_name, wr1_name, wr2_name, wr3_name, opponent_team)
 print(f"Predicted passing yards for {qb_name}: {predicted_yards:.2f}")
