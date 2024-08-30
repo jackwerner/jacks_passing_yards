@@ -2,6 +2,10 @@ import pandas as pd
 import numpy as np
 from urllib.parse import urljoin
 import urllib.error
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Base URL for the data files
 base_url = "https://github.com/nflverse/nflverse-data/releases/download/"
@@ -19,6 +23,8 @@ def load_data(url):
 print("Loading QB data...")
 qb_data = pd.concat([load_data(f"player_stats/player_stats_{year}.csv") for year in range(2018, 2024)])
 qb_data = qb_data[qb_data['position'] == 'QB']
+# Filter and select only the specified columns
+
 print(f"QB data loaded. Shape: {qb_data.shape}")
 
 # Create season pass dataset
@@ -83,50 +89,97 @@ for year in range(2018, 2024):
 target_stats = pd.concat(target_stats)
 print(f"Receiving stats loaded. Shape: {target_stats.shape}")
 
-# Get top 3 receivers by targets for each team, season, and week
-print("Identifying top 3 targeted for each game...")
-target_stats = target_stats.rename(columns={'team_abbr': 'team'})
-top_receivers = target_stats.sort_values('targets', ascending=False).groupby(['season', 'week', 'team']).head(3)
-
 # Load the NFL IDs mapping file
+print("Loading NFL IDs mapping...")
 nfl_ids = pd.read_csv('nfl_ids.csv')
+print(f"NFL IDs mapping loaded. Shape: {nfl_ids.shape}")
 
-# Merge top_receivers with the NFL IDs mapping
-top_receivers = top_receivers.merge(nfl_ids[['gsis_id', 'pfr_id']], 
-                                    left_on='player_gsis_id', 
-                                    right_on='gsis_id', 
-                                    how='left')
+# Merge target_stats with NFL IDs to get rotowire_id
+target_stats = target_stats.merge(nfl_ids[['gsis_id', 'rotowire_id']], 
+                                  left_on='player_gsis_id', 
+                                  right_on='gsis_id', 
+                                  how='left')
+target_stats['player_id'] = target_stats['rotowire_id']#.fillna(target_stats['player_gsis_id'])
+target_stats = target_stats.drop(columns=['gsis_id', 'rotowire_id', 'player_gsis_id'])
 
-# Now merge with rec_stats using pfr_id
-top_receivers = top_receivers.merge(rec_stats[['player_id', 'season', 'team', 'season_rec_targets_p_game', 'season_rec_p_game', 
-                                               'season_rec_p_target', 'season_rec_yards_p_game', 'season_ybc_p_r', 'season_yac_p_r', 
-                                               'season_broken_tackle_p_game', 'season_drop_percent', 'season_int_p_target', 'season_adot']], 
-                                    left_on=['pfr_id', 'season', 'team'],
-                                    right_on=['player_id', 'season', 'team'],
-                                    how='left')
+# Ensure rec_stats uses rotowire_id as player_id
+rec_stats = rec_stats.merge(nfl_ids[['pfr_id', 'rotowire_id']], 
+                            left_on='player_id', 
+                            right_on='pfr_id', 
+                            how='left')
+rec_stats['player_id'] = rec_stats['rotowire_id']#.fillna(rec_stats['player_id'])
+rec_stats = rec_stats.drop(columns=['pfr_id', 'rotowire_id'])
 
-# Drop unnecessary columns and rename pfr_id to player_id for consistency
-top_receivers = top_receivers.drop(columns=['gsis_id', 'player_id'])
-top_receivers = top_receivers.rename(columns={'pfr_id': 'player_id'})
+# Now merge target_stats with rec_stats using the correct player_id
+print("Merging target_stats with rec_stats...")
+target_stats = target_stats.rename(columns={'team_abbr': 'team'})
+receiver_data = target_stats.merge(rec_stats, on=['player_id', 'season', 'team'], how='left')
+print(f"Merged receiver data shape: {receiver_data.shape}")
 
-# After creating top_receivers DataFrame
-print("Top receivers sample:")
+# Get top 3 receivers by offense_pct for each team, season, and week
+print("Identifying top 3 receivers for each game...")
+top_receivers = receiver_data.sort_values('targets', ascending=False).groupby(['season', 'week', 'team']).head(3)
+
+# Merge top_receivers with NFL IDs mapping
+print("Merging top receivers with NFL IDs mapping...")
+logger.info(f"top_receivers['player_id'] dtype: {top_receivers['player_id'].dtype}")
+logger.info(f"nfl_ids['gsis_id'] dtype: {nfl_ids['gsis_id'].dtype}")
+
+# Before merging, convert player_id to string in top_receivers
+top_receivers['player_id'] = top_receivers['player_id'].astype(str)
+
+# Ensure nfl_ids['gsis_id'] is also string type
+nfl_ids['gsis_id'] = nfl_ids['gsis_id'].astype(str)
+
+try:
+    top_receivers = top_receivers.merge(nfl_ids[['gsis_id', 'rotowire_id']], 
+                                        left_on='player_id', 
+                                        right_on='gsis_id', 
+                                        how='left')
+    top_receivers['player_id'] = top_receivers['rotowire_id'].fillna(top_receivers['player_id'])
+    top_receivers = top_receivers.drop(columns=['gsis_id', 'rotowire_id'])
+except Exception as e:
+    logger.error(f"Error during merge operation: {str(e)}")
+    raise
+
 # Create columns for each of the top 3 receivers' stats
 receiver_stats = ['season_rec_targets_p_game', 'season_rec_p_game', 'season_rec_p_target', 'season_rec_yards_p_game', 
                   'season_ybc_p_r', 'season_yac_p_r', 'season_broken_tackle_p_game', 'season_drop_percent', 
                   'season_int_p_target', 'season_adot']
 
-def safe_get_player_id(x, i):
-    return x.iloc[i-1] if len(x) >= i else None
+def safe_access(x, i):
+    return x.iloc[i] if i < len(x) else pd.NA
+
+# Create a new DataFrame to store only the desired columns
+new_top_receivers = pd.DataFrame()
+new_top_receivers['season'] = top_receivers['season']
+new_top_receivers['week'] = top_receivers['week']
+new_top_receivers['team'] = top_receivers['team']
 
 for i in range(1, 4):
-    top_receivers[f'WR_{i}_player_id'] = top_receivers.groupby(['season', 'week', 'team'])['player_id'].transform(lambda x: safe_get_player_id(x, i))
+    new_top_receivers[f'WR_{i}_player_id'] = top_receivers.groupby(['season', 'week', 'team'])['player_id'].transform(lambda x: safe_access(x, i-1))
     for stat in receiver_stats:
-        top_receivers[f'WR_{i}_{stat}'] = top_receivers.groupby(['season', 'week', 'team'])[stat].transform(lambda x: x.iloc[i-1] if len(x) >= i else None)
+        new_top_receivers[f'WR_{i}_{stat}'] = top_receivers.groupby(['season', 'week', 'team'])[stat].transform(lambda x: safe_access(x, i-1))
+
+# Replace the original top_receivers DataFrame with the new one
+top_receivers = new_top_receivers
+
+# Handle missing values for receiver stats
+for col in top_receivers.columns:
+    if col.startswith('WR_'):
+        if col.endswith('player_id'):
+            top_receivers[col] = top_receivers[col].fillna('Unknown')
+        else:
+            top_receivers[col] = top_receivers[col].fillna(top_receivers[col].mean())
 
 # Keep only one row per team, season, and week
 top_receivers = top_receivers.groupby(['season', 'week', 'team']).first().reset_index()
 
+# Merge top_receivers with the rest of the data
+print("Merging top receivers data with QB data...")
+qb_data = qb_data.rename(columns={'recent_team': 'team'})
+final_data = qb_data.merge(top_receivers, on=['season', 'week', 'team'], how='left')
+print(f"Final data shape after merging receivers: {final_data.shape}")
 
 # Update the URL and season range
 defense_url = "https://github.com/nflverse/nflverse-data/releases/download/pfr_advstats/advstats_season_def.csv"
@@ -193,17 +246,8 @@ print(f"Defensive stats columns: {defense_stats.columns.tolist()}")
 print("Merging all data...")
 print(f"QB data shape: {qb_data.shape}")
 print(f"Season pass shape: {season_pass.shape}")
-final_data = qb_data.merge(season_pass, on=['player_id', 'season'], suffixes=('', '_season'))
+final_data = final_data.merge(season_pass, on=['player_id', 'season'], suffixes=('', '_season'))
 print(f"After first merge shape: {final_data.shape}")
-
-# Modify the merge with top_receivers
-print("Merging QB data with top receivers...")
-final_data = final_data.merge(top_receivers, 
-                              left_on=['season', 'week', 'recent_team'], 
-                              right_on=['season', 'week', 'team'], 
-                              how='left',  # Change to left join
-                              suffixes=('', '_receiver'))
-print(f"After merging with top receivers shape: {final_data.shape}")
 
 # Check for missing values in receiver columns
 receiver_columns = [col for col in final_data.columns if col.startswith('WR_')]
@@ -265,7 +309,6 @@ if missing_columns:
     columns_to_keep = [col for col in columns_to_keep if col in final_data.columns]
 
 final_dataset = final_data[columns_to_keep]
-
 # Before saving the final dataset
 print("Final dataset sample:")
 print(final_dataset[['player_id', 'player_name', 'season', 'week', 'WR_1_player_id', 'WR_1_season_rec_targets_p_game']].head())
