@@ -178,10 +178,20 @@ rec_stats = rec_stats.merge(nfl_ids[['rotowire_id', 'pfr_id']], left_on='player_
 rec_stats = rec_stats.drop(['pfr_id', 'player_id'], axis=1)
 rec_stats.rename(columns={'rotowire_id': 'player_id'}, inplace=True)
 
-def get_player_id(name):
+def get_player_id(name, position=None):
     """Get the rotowire_id from the NFL IDs mapping file."""
-    player = nfl_ids[nfl_ids['name'] == name].iloc[0]
-    return player['rotowire_id']
+    players = nfl_ids[nfl_ids['name'] == name]
+    
+    if len(players) > 1 and position == 'QB':
+        # If there are multiple players with the same name and we're looking for a QB
+        qb_players = players[players['position'] == 'QB']
+        if not qb_players.empty:
+            return qb_players.iloc[0]['rotowire_id']
+    
+    if players.empty:
+        raise ValueError(f"No player found with name: {name}")
+    
+    return players.iloc[0]['rotowire_id']
 
 def get_player_stats(rotowire_id, position):
     """Get the player's average stats from the 2023 dataset."""
@@ -201,7 +211,7 @@ def get_player_stats(rotowire_id, position):
 
 def predict_passing_yards(qb_name, wr1_name, wr2_name, wr3_name, opponent_team):
     # Get player IDs
-    qb_id = get_player_id(qb_name)
+    qb_id = get_player_id(qb_name, position='QB')
     wr1_id = get_player_id(wr1_name)
     wr2_id = get_player_id(wr2_name)
     wr3_id = get_player_id(wr3_name)
@@ -244,11 +254,11 @@ def predict_passing_yards(qb_name, wr1_name, wr2_name, wr3_name, opponent_team):
     return prediction[0]
 
 # Example usage
-qb_name = "Jalen Hurts"
-wr1_name = "A.J. Brown"
-wr2_name = "DeVonta Smith"
-wr3_name = "Saquon Barkley"
-opponent_team = "GB"
+qb_name = "Lamar Jackson"
+wr1_name = "Zay Flowers"
+wr2_name = "Mark Andrews"
+wr3_name = "Rashod Bateman"
+opponent_team = "KC"
 
 predicted_yards = predict_passing_yards(qb_name, wr1_name, wr2_name, wr3_name, opponent_team)
 print(f"Predicted passing yards for {qb_name}: {predicted_yards:.2f}")
