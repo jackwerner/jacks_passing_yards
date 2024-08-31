@@ -1,11 +1,10 @@
 import nfl_data_py as nfl
 import pandas as pd
-import numpy as np
 from datetime import datetime, date
 
-# Import schedule and depth charts
+# Import schedule and weekly stats
 schedule = nfl.import_schedules([2024])
-depth_charts = nfl.import_depth_charts([2023])
+weekly_stats = nfl.import_weekly_data([2023])
 
 # Get the first game from the schedule
 first_game = schedule.iloc[0]
@@ -14,31 +13,30 @@ first_game = schedule.iloc[0]
 home_team = first_game['home_team']
 away_team = first_game['away_team']
 
-# Function to get QB and top 3 WRs for a team
+# Function to get QB and top 3 receivers by average targets per game
 def get_players(team):
-    team_depth = depth_charts[depth_charts['club_code'] == team]
-    
-    # Convert depth_team to numeric, replacing non-numeric values with NaN
-    team_depth['depth_team'] = pd.to_numeric(team_depth['depth_team'], errors='coerce')
-    
-    # Calculate average depth position for each player, ignoring NaN values
-    avg_depth = team_depth.groupby(['full_name', 'position'])['depth_team'].mean().reset_index()
-    
+    team_stats = weekly_stats[weekly_stats['recent_team'] == team]
     # Get QB
-    qb = avg_depth[(avg_depth['position'] == 'QB') & avg_depth['depth_team'].notna()].sort_values('depth_team').iloc[0]['full_name'] if not avg_depth[(avg_depth['position'] == 'QB') & avg_depth['depth_team'].notna()].empty else "No QB found"
+    qb_stats = team_stats[team_stats['position'] == 'QB']
+    qb = qb_stats.groupby('player_display_name')['passing_yards'].sum().sort_values(ascending=False).index[0] if not qb_stats.empty else "No QB found"
     
-    # Get top 3 WRs
-    wrs = avg_depth[(avg_depth['position'] == 'WR') & avg_depth['depth_team'].notna()].sort_values('depth_team').head(3)['full_name'].tolist()
+    # Calculate average targets per game for receivers
+    receiver_stats = team_stats[team_stats['position'].isin(['WR', 'TE', 'RB'])]
+    avg_targets = receiver_stats.groupby('player_display_name')['targets'].agg(['sum', 'count'])
+    avg_targets['avg_targets_per_game'] = avg_targets['sum'] / avg_targets['count']
     
-    return qb, wrs
+    # Get top 3 receivers by average targets per game
+    top_receivers = avg_targets.sort_values('avg_targets_per_game', ascending=False).head(3).index.tolist()
+    
+    return qb, top_receivers
 
 # Get players for both teams
-home_qb, home_wrs = get_players(home_team)
-away_qb, away_wrs = get_players(away_team)
+home_qb, home_receivers = get_players(home_team)
+away_qb, away_receivers = get_players(away_team)
 
 print(f"First game: {away_team} @ {home_team}")
 print(f"{home_team} QB: {home_qb}")
-print(f"{home_team} Top 3 WRs: {', '.join(home_wrs)}")
+print(f"{home_team} Top 3 Receivers: {', '.join(home_receivers)}")
 print(f"{away_team} QB: {away_qb}")
-print(f"{away_team} Top 3 WRs: {', '.join(away_wrs)}")
+print(f"{away_team} Top 3 Receivers: {', '.join(away_receivers)}")
 
