@@ -8,6 +8,8 @@ import urllib.error
 import warnings
 import numpy as np
 import joblib
+import sys
+import traceback
 
 warnings.filterwarnings("ignore", category=RuntimeWarning, message="invalid value encountered in scalar divide")
 
@@ -210,55 +212,76 @@ def get_player_stats(rotowire_id, position):
     return player_data
 
 def predict_passing_yards(qb_name, wr1_name, wr2_name, wr3_name, opponent_team):
-    # Get player IDs
-    qb_id = get_player_id(qb_name, position='QB')
-    wr1_id = get_player_id(wr1_name)
-    wr2_id = get_player_id(wr2_name)
-    wr3_id = get_player_id(wr3_name)
+    try:
+        print("Starting predict_passing_yards function")
+        
+        print("About to load feature names")
+        with open('qb_passing_yards_model_features_v2.json', 'r') as f:
+            feature_names = json.load(f)
+        print("Feature names loaded successfully")
+        print(f"Number of features: {len(feature_names)}")
+        
+        # Get player IDs
+        qb_id = get_player_id(qb_name, position='QB')
+        wr1_id = get_player_id(wr1_name)
+        wr2_id = get_player_id(wr2_name)
+        wr3_id = get_player_id(wr3_name)
 
-    # Get player stats
-    qb_stats = get_player_stats(qb_id, 'QB')
-    wr1_stats = get_player_stats(wr1_id, 'WR')
-    wr2_stats = get_player_stats(wr2_id, 'WR')
-    wr3_stats = get_player_stats(wr3_id, 'WR')
-    defense_stats = get_defense_stats(opponent_team).drop('tm')
+        # Get player stats
+        qb_stats = get_player_stats(qb_id, 'QB')
+        wr1_stats = get_player_stats(wr1_id, 'WR')
+        wr2_stats = get_player_stats(wr2_id, 'WR')
+        wr3_stats = get_player_stats(wr3_id, 'WR')
+        defense_stats = get_defense_stats(opponent_team).drop('tm')
 
-    # Prepare input data
-    input_data = pd.DataFrame({
-        **qb_stats.to_dict(),
-        **{f'WR_1_{k}': v for k, v in wr1_stats.items()},
-        **{f'WR_2_{k}': v for k, v in wr2_stats.items()},
-        **{f'WR_3_{k}': v for k, v in wr3_stats.items()},
-        **defense_stats.to_dict()  # Include all defense stats directly
-    }, index=[0])
-    # Ensure all expected features are present
-    for feature in expected_features['all']:
-        if feature not in input_data.columns:
-            print(f"Feature {feature} not found in input data.")
-            input_data[feature] = 0
+        # Prepare input data
+        input_data = pd.DataFrame({
+            **qb_stats.to_dict(),
+            **{f'WR_1_{k}': v for k, v in wr1_stats.items()},
+            **{f'WR_2_{k}': v for k, v in wr2_stats.items()},
+            **{f'WR_3_{k}': v for k, v in wr3_stats.items()},
+            **defense_stats.to_dict()  # Include all defense stats directly
+        }, index=[0])
+        # Ensure all expected features are present
+        for feature in expected_features['all']:
+            if feature not in input_data.columns:
+                print(f"Feature {feature} not found in input data.")
+                input_data[feature] = 0
 
-    # Scale the input data
-    input_data_scaled = pd.DataFrame(scaler.transform(input_data), columns=input_data.columns)
+        # Scale the input data
+        input_data_scaled = pd.DataFrame(scaler.transform(input_data), columns=input_data.columns)
 
-    # Reorder columns to match the expected feature order
-    input_data_scaled = input_data_scaled[expected_features['all']]
+        # Reorder columns to match the expected feature order
+        input_data_scaled = input_data_scaled[expected_features['all']]
 
-    # Print defensive stats and final input data for debugging
-    # print("Defensive stats for", opponent_team, ":", defense_stats.to_dict())
-    # print("Final input data:")
-    # print(input_data_scaled)
+        # Print defensive stats and final input data for debugging
+        # print("Defensive stats for", opponent_team, ":", defense_stats.to_dict())
+        # print("Final input data:")
+        # print(input_data_scaled)
 
-    # Make prediction
-    prediction = model.predict(input_data_scaled)
+        # Make prediction
+        prediction = model.predict(input_data_scaled)
 
-    return prediction[0]
+        return prediction[0]
+
+    except json.JSONDecodeError as e:
+        print(f"JSON Decode Error: {str(e)}")
+        traceback.print_exc()
+    except FileNotFoundError as e:
+        print(f"File Not Found Error: {str(e)}")
+        traceback.print_exc()
+    except Exception as e:
+        print(f"Unexpected error: {str(e)}")
+        traceback.print_exc()
+    
+    sys.exit(1)
 
 # Example usage
-qb_name = "Lamar Jackson"
-wr1_name = "Zay Flowers"
-wr2_name = "Mark Andrews"
-wr3_name = "Rashod Bateman"
-opponent_team = "KC"
+qb_name = "Patrick Mahomes"
+wr1_name = "Rashee Rice"
+wr2_name = "Travis Kelce"
+wr3_name = "Isiah Pacheco"
+opponent_team = "BAL"
 
 predicted_yards = predict_passing_yards(qb_name, wr1_name, wr2_name, wr3_name, opponent_team)
 print(f"Predicted passing yards for {qb_name}: {predicted_yards:.2f}")

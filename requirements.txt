@@ -1,0 +1,6 @@
+streamlit
+pandas
+nfl_data_py
+xgboost
+scikit-learn
+joblib

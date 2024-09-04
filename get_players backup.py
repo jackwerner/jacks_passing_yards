@@ -22,24 +22,22 @@ next_7_days_games = next_7_days_games.sort_values('gameday')
 # Import weekly stats
 weekly_stats = nfl.import_weekly_data([2023]) #need to change this to 2024
 
-# Function to get QB and all receivers ordered by average targets per game
+# Function to get QB and top 3 receivers by average targets per game
 def get_players(team):
     team_stats = weekly_stats[weekly_stats['recent_team'] == team]
-    
     # Get QB
     qb_stats = team_stats[team_stats['position'] == 'QB']
     qb = qb_stats.groupby('player_display_name')['passing_yards'].sum().sort_values(ascending=False).index[0] if not qb_stats.empty else "No QB found"
     
-    # Get all receivers (WR, TE, RB) ordered by average targets per game
+    # Calculate average targets per game for receivers
     receiver_stats = team_stats[team_stats['position'].isin(['WR', 'TE', 'RB'])]
+    avg_targets = receiver_stats.groupby('player_display_name')['targets'].agg(['sum', 'count'])
+    avg_targets['avg_targets_per_game'] = avg_targets['sum'] / avg_targets['count']
     
-    # Calculate average targets per game
-    avg_targets = receiver_stats.groupby('player_display_name')['targets'].mean().sort_values(ascending=False)
+    # Get top 3 receivers by average targets per game
+    top_receivers = avg_targets.sort_values('avg_targets_per_game', ascending=False).head(3).index.tolist()
     
-    # Get the ordered list of receivers
-    all_receivers = avg_targets.index.tolist()
-    
-    return qb, all_receivers
+    return qb, top_receivers
 
 # Print games and player details for the next 7 days
 print(f"Games and players in the next 7 days (from {current_date} to {end_date}):")
