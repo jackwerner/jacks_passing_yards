@@ -5,6 +5,7 @@ import nfl_data_py as nfl
 from get_players import get_players
 from predict_passing_yards import predict_passing_yards
 import csv
+from odds_api import get_qb_passing_yards_odds  # Updated import
 
 st.set_page_config(layout="wide")
 
@@ -40,7 +41,7 @@ def main():
         # Create two rows for home and away teams
         for team, qb, receivers in [(game['home_team'], home_qb, home_receivers),
                                     (game['away_team'], away_qb, away_receivers)]:
-            cols = st.columns([2, 3, 3, 3, 3])
+            cols = st.columns([2, 3, 3, 3, 3, 3])  # Add one more column
             
             with cols[0]:
                 st.write(f"**{team}**")
@@ -65,7 +66,7 @@ def main():
                     st.success(f"{yards:.2f} yards")
                     
                     # Add prediction to the list
-                    all_predictions.append({
+                    prediction = {
                         'Date': game['gameday'].strftime('%m/%d'),
                         'Team': team,
                         'QB': qb,
@@ -74,7 +75,24 @@ def main():
                         'Target 3': wr3,
                         'Opponent': game['away_team'] if team == game['home_team'] else game['home_team'],
                         'Predicted Yards': f"{yards:.2f}"
-                    })
+                    }
+
+                    # Add Odds API data
+                    with cols[5]:
+                        st.write("Odds API:")
+                        odds_info = get_qb_passing_yards_odds(team, qb)
+                        if odds_info:
+                            st.info(f"{odds_info['line']} yards")
+                            prediction['Odds API Yards'] = f"{odds_info['line']}"
+                            prediction['Odds API Over'] = f"{odds_info['over']}"
+                            prediction['Odds API Under'] = f"{odds_info['under']}"
+                        else:
+                            st.warning("N/A")
+                            prediction['Odds API Yards'] = "N/A"
+                            prediction['Odds API Over'] = "N/A"
+                            prediction['Odds API Under'] = "N/A"
+
+                    all_predictions.append(prediction)
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
 
