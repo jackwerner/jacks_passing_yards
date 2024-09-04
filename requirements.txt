@@ -1,6 +1,12 @@
 streamlit
 pandas
+numpy
 nfl_data_py
 xgboost
 scikit-learn
 joblib
+requests
+python-dotenv
+urllib3
+datetime
+functools
