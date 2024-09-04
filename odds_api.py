@@ -1,9 +1,7 @@
 import requests
-import os
-from functools import wraps
 
 
-api_key = os.environ.get("ODDS_API_KEY")
+api_key = "206c5b9549466e63683cb8aa04ea528b"
 
 # NFL team abbreviations to full names mapping
 nfl_teams = {

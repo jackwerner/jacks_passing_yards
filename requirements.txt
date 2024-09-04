@@ -9,4 +9,3 @@ requests
 python-dotenv
 urllib3
 datetime
-functools
