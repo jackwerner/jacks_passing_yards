@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 import nfl_data_py as nfl
 from get_players import get_players
 from predict_passing_yards import predict_passing_yards
+import csv
 
 st.set_page_config(layout="wide")
 
@@ -25,6 +26,9 @@ def main():
     games = load_data()
 
     st.subheader("Upcoming Games and Passing Yard Predictions")
+
+    # Create a list to store all predictions
+    all_predictions = []
 
     for _, game in games.iterrows():
         st.write(f"**{game['gameday'].strftime('%m/%d')} - {game['away_team']} @ {game['home_team']}**")
@@ -59,10 +63,33 @@ def main():
                 try:
                     yards = predict_passing_yards(qb, wr1, wr2, wr3, game['away_team'] if team == game['home_team'] else game['home_team'])
                     st.success(f"{yards:.2f} yards")
+                    
+                    # Add prediction to the list
+                    all_predictions.append({
+                        'Date': game['gameday'].strftime('%m/%d'),
+                        'Team': team,
+                        'QB': qb,
+                        'Target 1': wr1,
+                        'Target 2': wr2,
+                        'Target 3': wr3,
+                        'Opponent': game['away_team'] if team == game['home_team'] else game['home_team'],
+                        'Predicted Yards': f"{yards:.2f}"
+                    })
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
 
         st.write("---")
+
+    # Add a button to save predictions to CSV
+    if st.button("Save Predictions to CSV"):
+        df = pd.DataFrame(all_predictions)
+        csv = df.to_csv(index=False)
+        st.download_button(
+            label="Download CSV",
+            data=csv,
+            file_name="nfl_passing_yards_predictions.csv",
+            mime="text/csv"
+        )
 
 if __name__ == "__main__":
     main()
