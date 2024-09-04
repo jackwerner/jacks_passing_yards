@@ -24,53 +24,45 @@ def main():
     # Load data
     games = load_data()
 
-    # Game selection using cards
-    st.subheader("Select a game:")
-    
-    # Create columns for game cards
-    cols = st.columns(6)  # Adjust the number of columns as needed
-    
-    for idx, (_, game) in enumerate(games.iterrows()):
-        with cols[idx % 6]:  # This will cycle through the columns
-            game_str = f"{game['gameday'].strftime('%m/%d')}\n{game['away_team']} @ {game['home_team']}"
-            if st.button(game_str, key=game_str, use_container_width=True):
-                st.session_state.selected_game = game
+    st.subheader("Upcoming Games and Passing Yard Predictions")
 
-    if 'selected_game' in st.session_state and st.session_state.selected_game is not None:
-        selected_game = st.session_state.selected_game
-        st.write(f"Selected game: {selected_game['away_team']} @ {selected_game['home_team']}")
+    for _, game in games.iterrows():
+        st.write(f"**{game['gameday'].strftime('%m/%d')} - {game['away_team']} @ {game['home_team']}**")
 
         # Get players for both teams
-        home_qb, home_receivers = get_players(selected_game['home_team'])
-        away_qb, away_receivers = get_players(selected_game['away_team'])
+        home_qb, home_receivers = get_players(game['home_team'])
+        away_qb, away_receivers = get_players(game['away_team'])
 
-        # Team selection
-        selected_team = st.radio("Select a team:", [selected_game['home_team'], selected_game['away_team']])
+        # Create two rows for home and away teams
+        for team, qb, receivers in [(game['home_team'], home_qb, home_receivers),
+                                    (game['away_team'], away_qb, away_receivers)]:
+            cols = st.columns([2, 3, 3, 3, 3])
+            
+            with cols[0]:
+                st.write(f"**{team}**")
+                st.write(f"QB: {qb}")
 
-        # QB and receiver selection
-        if selected_team == selected_game['home_team']:
-            qb = st.selectbox("Select QB:", [home_qb])
-            receivers = home_receivers
-            opponent_team = selected_game['away_team']
-        else:
-            qb = st.selectbox("Select QB:", [away_qb])
-            receivers = away_receivers
-            opponent_team = selected_game['home_team']
+            with cols[1]:
+                st.write("Target 1:")
+                wr1 = st.selectbox(f"", receivers, key=f"{team}_wr1_{_}", index=0)
 
-        # Set default index to 0, 1, and 2 for the top 3 targeted players
-        wr1 = st.selectbox("Select Target 1:", receivers, index=0)
-        wr2 = st.selectbox("Select Target 2:", receivers, index=min(1, len(receivers)-1))
-        wr3 = st.selectbox("Select Target 3:", receivers, index=min(2, len(receivers)-1))
+            with cols[2]:
+                st.write("Target 2:")
+                wr2 = st.selectbox(f"", receivers, key=f"{team}_wr2_{_}", index=min(1, len(receivers)-1))
 
-        # Predict button
-        if st.button("Predict Passing Yards"):
-            try:
-                predicted_yards = predict_passing_yards(qb, wr1, wr2, wr3, opponent_team)
-                st.success(f"Predicted passing yards for {qb}: {predicted_yards:.2f}")
-            except Exception as e:
-                st.error(f"An error occurred: {str(e)}")
-    else:
-        st.info("Please select a game to continue.")
+            with cols[3]:
+                st.write("Target 3:")
+                wr3 = st.selectbox(f"", receivers, key=f"{team}_wr3_{_}", index=min(2, len(receivers)-1))
+
+            with cols[4]:
+                st.write("Prediction:")
+                try:
+                    yards = predict_passing_yards(qb, wr1, wr2, wr3, game['away_team'] if team == game['home_team'] else game['home_team'])
+                    st.success(f"{yards:.2f} yards")
+                except Exception as e:
+                    st.error(f"Error: {str(e)}")
+
+        st.write("---")
 
 if __name__ == "__main__":
     main()
