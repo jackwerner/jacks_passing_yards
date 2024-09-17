@@ -20,7 +20,7 @@ next_7_days_games = schedule[(schedule['gameday'].dt.date >= current_date) &
 next_7_days_games = next_7_days_games.sort_values('gameday')
 
 # Import weekly stats
-weekly_stats = nfl.import_weekly_data([2023]) #need to change this to 2024
+weekly_stats = nfl.import_weekly_data([2024]) #need to change this to 2024
 
 # Function to get QB and all receivers ordered by average targets per game
 def get_players(team):
