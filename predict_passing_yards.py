@@ -6,10 +6,8 @@ from sklearn.preprocessing import StandardScaler
 import json
 import urllib.error
 import warnings
-import numpy as np
 import joblib
 import sys
-import traceback
 
 warnings.filterwarnings("ignore", category=RuntimeWarning, message="invalid value encountered in scalar divide")
 
@@ -29,25 +27,13 @@ def load_data(url):
 def load_defense_stats():
     defense_url = "pfr_advstats/advstats_season_def.csv"
     defense_stats = load_data(defense_url)
-    defense_stats = defense_stats[defense_stats['season'] == 2023]  # Filter for 2023 season
+    defense_stats = defense_stats[defense_stats['season'] == 2024] # hard code defense
     
     # Calculate defensive stats
     defense_stats = defense_stats.groupby('tm').agg({
-        'int': 'mean',
-        'tgt': 'mean',
-        'cmp': 'mean',
-        'yds': 'mean',
-        'td': 'mean',
-        'rat': 'mean',
-        'dadot': 'mean',
-        'air': 'mean',
-        'yac': 'mean',
-        'bltz': 'mean',
-        'hrry': 'mean',
-        'qbkd': 'mean',
-        'sk': 'mean',
-        'prss': 'mean',
-        'comb': 'mean',
+        'int': 'mean', 'tgt': 'mean', 'cmp': 'mean', 'yds': 'mean', 'td': 'mean',
+        'rat': 'mean', 'dadot': 'mean', 'air': 'mean', 'yac': 'mean', 'bltz': 'mean',
+        'hrry': 'mean', 'qbkd': 'mean', 'sk': 'mean', 'prss': 'mean', 'comb': 'mean',
         'm_tkl': 'mean'
     }).reset_index()
     
@@ -57,26 +43,14 @@ def load_defense_stats():
     defense_stats['def_yards_per_tgt'] = np.where(defense_stats['tgt'] != 0, defense_stats['yds'] / defense_stats['tgt'], 0)
     defense_stats['def_missed_tackle_percent'] = np.where(defense_stats['comb'] != 0, defense_stats['m_tkl'] / defense_stats['comb'], 0)
     
+    # Rename columns
     defense_stats = defense_stats.rename(columns={
-    'int': 'def_interceptions',
-    'tgt': 'def_targets',
-    'cmp': 'def_completions',
-    'yds': 'def_yards',
-    'td': 'def_td',
-    'rat': 'def_rating',
-    'dadot': 'def_dadot',
-    'air': 'def_air_yards',
-    'yac': 'def_yards_after_catch',
-    'bltz': 'def_blitz',
-    'hrry': 'def_hurry',
-    'qbkd': 'def_qbkd',
-    'sk': 'def_sacks',
-    'prss': 'def_pressures',
-    'comb': 'def_combined_tackles',
-    'm_tkl': 'def_missed_tackles'
+        'int': 'def_interceptions', 'tgt': 'def_targets', 'cmp': 'def_completions',
+        'yds': 'def_yards', 'td': 'def_td', 'rat': 'def_rating', 'dadot': 'def_dadot',
+        'air': 'def_air_yards', 'yac': 'def_yards_after_catch', 'bltz': 'def_blitz',
+        'hrry': 'def_hurry', 'qbkd': 'def_qbkd', 'sk': 'def_sacks', 'prss': 'def_pressures',
+        'comb': 'def_combined_tackles', 'm_tkl': 'def_missed_tackles'
     })
-    # Rename columns to add 'def_' prefix
-    # defense_stats.columns = ['team' if col == 'tm' else f'def_{col}' for col in defense_stats.columns]
     
     return defense_stats
 
@@ -84,43 +58,26 @@ def load_defense_stats():
 defense_stats = load_defense_stats()
 
 def get_defense_stats(team):
-    """Get the defensive stats for the opponent team."""
     team_stats = defense_stats[defense_stats['tm'] == team]
     if team_stats.empty:
         raise ValueError(f"No defensive stats found for team: {team}")
     return team_stats.iloc[0]
 
-# Load feature names from the JSON file
+# Load feature names, model, and scaler
 with open('qb_passing_yards_model_features_v2.json', 'r') as f:
     expected_features = json.load(f)
 
-print("Feature names loaded from 'qb_passing_yards_model_features_v2.json'")
-
-# Load the trained model
 model = xgb.XGBRegressor()
-try:
-    model.load_model('qb_passing_yards_model_v2.json')
-except Exception as e:
-    print(f"Error loading the model: {e}")
-    print("Please ensure the model file 'qb_passing_yards_model_v2.json' exists and is valid.")
-    exit(1)
+model.load_model('qb_passing_yards_model_v2.json')
+scaler = joblib.load('qb_passing_yards_scaler_v2.joblib')
 
-# Load the scaler
-try:
-    scaler = joblib.load('qb_passing_yards_scaler_v2.joblib')
-    print("Scaler loaded successfully.")
-except Exception as e:
-    print(f"Error loading the scaler: {e}")
-    print("Please ensure the scaler file 'qb_passing_yards_scaler_v2.joblib' exists and is valid.")
-    exit(1)
-
-# Load weekly QB passing data (2023)
-print("Loading QB data...")
-qb_data = load_data("player_stats/player_stats_2023.csv")
+# Load weekly QB passing data (2023 and 2024)
+qb_data_2023 = load_data("player_stats/player_stats_2023.csv")
+qb_data_2024 = load_data("player_stats/player_stats_2024.csv")
+qb_data = pd.concat([qb_data_2023, qb_data_2024])
 qb_data = qb_data[qb_data['position'] == 'QB']
 
 # Create season pass dataset
-print("Creating season pass dataset...")
 season_pass = qb_data.groupby(['player_id', 'season']).agg({
     'completions': ['count', 'mean', 'std', lambda x: x.sum() / qb_data.loc[x.index, 'attempts'].sum()],
     'attempts': ['mean', 'std'],
@@ -150,11 +107,13 @@ season_pass.columns = ['player_id', 'season', 'games', 'completions_per_game', '
 
 # Merge qb_data with season_pass
 qb_data = qb_data.merge(season_pass, on=['player_id', 'season'], how='left')
-print(f"QB data loaded and merged with season stats. Shape: {qb_data.shape}")
 
-# Load receiving stats for 2023
-rec_stats = load_data("pfr_advstats/advstats_season_rec.csv")
-rec_stats = rec_stats[rec_stats['season'] == 2023]
+# Load receiving stats for 2023 and 2024
+rec_stats_2023 = load_data("pfr_advstats/advstats_season_rec.csv")
+rec_stats_2023 = rec_stats_2023[rec_stats_2023['season'] == 2023]
+rec_stats_2024 = load_data("pfr_advstats/advstats_season_rec.csv")
+rec_stats_2024 = rec_stats_2024[rec_stats_2024['season'] == 2024]
+rec_stats = pd.concat([rec_stats_2023, rec_stats_2024])
 rec_stats = rec_stats.rename(columns={'pfr_id': 'player_id', 'tm': 'team'})
 
 # Calculate season-long average receiving stats
@@ -168,84 +127,57 @@ rec_stats['season_broken_tackle_p_game'] = rec_stats['brk_tkl'] / rec_stats['g']
 rec_stats['season_drop_percent'] = rec_stats['drop_percent']
 rec_stats['season_int_p_target'] = rec_stats['int'] / rec_stats['tgt']
 rec_stats['season_adot'] = rec_stats['adot']
-# Load the NFL IDs mapping file
-nfl_ids = pd.read_csv('nfl_ids.csv')
 
-# Merge qb_data with nfl_ids
-qb_data = qb_data.merge(nfl_ids[['rotowire_id', 'gsis_id']], left_on='player_id', right_on='gsis_id', how='left')
-qb_data = qb_data.drop('gsis_id', axis=1)
+# Create merge_name columns
+qb_data['merge_name'] = qb_data['player_display_name'].str.lower().str.replace('[.\']', '', regex=True).str.replace(' jr| sr', '', regex=True)
+rec_stats['merge_name'] = rec_stats['player'].str.lower().str.replace('[.\']', '', regex=True).str.replace(' jr| sr', '', regex=True)
 
-# merge rec_stats with nfl_ids
-rec_stats = rec_stats.merge(nfl_ids[['rotowire_id', 'pfr_id']], left_on='player_id', right_on='pfr_id', how='left')
-rec_stats = rec_stats.drop(['pfr_id', 'player_id'], axis=1)
-rec_stats.rename(columns={'rotowire_id': 'player_id'}, inplace=True)
-
-def get_player_id(name, position=None):
-    """Get the rotowire_id from the NFL IDs mapping file."""
-    players = nfl_ids[nfl_ids['name'] == name]
+def get_player_stats(player_name, position):
+    merge_name = player_name.lower().replace('.', '').replace("'", '').replace(' jr', '').replace(' sr', '')
     
-    if len(players) > 1 and position == 'QB':
-        # If there are multiple players with the same name and we're looking for a QB
-        qb_players = players[players['position'] == 'QB']
-        if not qb_players.empty:
-            return qb_players.iloc[0]['rotowire_id']
-    
-    if players.empty:
-        raise ValueError(f"No player found with name: {name}")
-    
-    return players.iloc[0]['rotowire_id']
-
-def get_player_stats(rotowire_id, position):
-    """Get the player's average stats from the 2023 dataset."""
     if position == 'QB':
-        # Use only the columns specified for QBs in the JSON file
         qb_columns = expected_features['qb_stats']
-        player_data = qb_data[qb_data['rotowire_id'] == rotowire_id][qb_columns].mean()
+        player_data = qb_data[qb_data['merge_name'] == merge_name][qb_columns]
+        
+        if player_data.empty:
+            return pd.Series({col: 0 for col in qb_columns})
+        
+        return player_data.mean()
     else:
-        # Use only the columns specified for receivers in the JSON file
         wr_columns = expected_features['wr_stats']
-        player_data = rec_stats[rec_stats['player_id'] == rotowire_id][wr_columns].mean()
-    
-    # Fill NaN values with 0
-    player_data = player_data.fillna(0)
-    
-    return player_data
+        player_data = rec_stats[rec_stats['merge_name'] == merge_name][wr_columns]
+        
+        if player_data.empty:
+            return pd.Series({col: 0 for col in wr_columns})
+        
+        return player_data.mean()
+
+def print_player_stats(player_name, position):
+    stats = get_player_stats(player_name, position)
+    print(f"\nStats for {player_name} ({position}):")
+    for stat, value in stats.items():
+        print(f"  {stat}: {value:.2f}")
 
 def predict_passing_yards(qb_name, wr1_name, wr2_name, wr3_name, opponent_team):
     try:
-        print("Starting predict_passing_yards function")
-        
-        print("About to load feature names")
-        with open('qb_passing_yards_model_features_v2.json', 'r') as f:
-            feature_names = json.load(f)
-        print("Feature names loaded successfully")
-        print(f"Number of features: {len(feature_names)}")
-        
-        # Get player IDs
-        qb_id = get_player_id(qb_name, position='QB')
-        wr1_id = get_player_id(wr1_name)
-        wr2_id = get_player_id(wr2_name)
-        wr3_id = get_player_id(wr3_name)
-
         # Get player stats
-        qb_stats = get_player_stats(qb_id, 'QB')
-        wr1_stats = get_player_stats(wr1_id, 'WR')
-        wr2_stats = get_player_stats(wr2_id, 'WR')
-        wr3_stats = get_player_stats(wr3_id, 'WR')
+        qb_stats = get_player_stats(qb_name, 'QB')
+        wr1_stats = get_player_stats(wr1_name, 'Any')
+        wr2_stats = get_player_stats(wr2_name, 'Any')
+        wr3_stats = get_player_stats(wr3_name, 'Any')
         defense_stats = get_defense_stats(opponent_team).drop('tm')
-
         # Prepare input data
         input_data = pd.DataFrame({
             **qb_stats.to_dict(),
             **{f'WR_1_{k}': v for k, v in wr1_stats.items()},
             **{f'WR_2_{k}': v for k, v in wr2_stats.items()},
             **{f'WR_3_{k}': v for k, v in wr3_stats.items()},
-            **defense_stats.to_dict()  # Include all defense stats directly
+            **defense_stats.to_dict()
         }, index=[0])
         # Ensure all expected features are present
         for feature in expected_features['all']:
             if feature not in input_data.columns:
-                print(f"Feature {feature} not found in input data.")
+                print(f"Warning: Feature '{feature}' not found in input data")
                 input_data[feature] = 0
 
         # Scale the input data
@@ -254,34 +186,32 @@ def predict_passing_yards(qb_name, wr1_name, wr2_name, wr3_name, opponent_team):
         # Reorder columns to match the expected feature order
         input_data_scaled = input_data_scaled[expected_features['all']]
 
-        # Print defensive stats and final input data for debugging
-        # print("Defensive stats for", opponent_team, ":", defense_stats.to_dict())
-        # print("Final input data:")
-        # print(input_data_scaled)
-
         # Make prediction
         prediction = model.predict(input_data_scaled)
 
         return prediction[0]
 
-    except json.JSONDecodeError as e:
-        print(f"JSON Decode Error: {str(e)}")
-        traceback.print_exc()
-    except FileNotFoundError as e:
-        print(f"File Not Found Error: {str(e)}")
-        traceback.print_exc()
     except Exception as e:
         print(f"Unexpected error: {str(e)}")
-        traceback.print_exc()
-    
-    sys.exit(1)
+        sys.exit(1)
 
 # Example usage
-qb_name = "Patrick Mahomes"
-wr1_name = "Rashee Rice"
+qb_name = "Brock Purdy"
+wr1_name = "Xavier Worthy"
 wr2_name = "Travis Kelce"
-wr3_name = "Isiah Pacheco"
+wr3_name = "Xavier Worthy"
 opponent_team = "BAL"
 
+print_player_stats(qb_name, 'QB')
+print_player_stats(wr1_name, 'Any')
+print_player_stats(wr2_name, 'Any')
+print_player_stats(wr3_name, 'Any')
+
+print(f"\nDefensive stats for {opponent_team}:")
+defense_stats_print = get_defense_stats(opponent_team)
+for stat, value in defense_stats_print.items():
+    if stat != 'tm':
+        print(f"  {stat}: {value:.2f}")
+
 predicted_yards = predict_passing_yards(qb_name, wr1_name, wr2_name, wr3_name, opponent_team)
-print(f"Predicted passing yards for {qb_name}: {predicted_yards:.2f}")
+print(f"\nPredicted passing yards for {qb_name}: {predicted_yards:.2f}")
