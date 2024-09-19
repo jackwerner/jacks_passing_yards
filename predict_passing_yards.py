@@ -195,23 +195,23 @@ def predict_passing_yards(qb_name, wr1_name, wr2_name, wr3_name, opponent_team):
         print(f"Unexpected error: {str(e)}")
         sys.exit(1)
 
-# Example usage
-qb_name = "Brock Purdy"
-wr1_name = "Xavier Worthy"
-wr2_name = "Travis Kelce"
-wr3_name = "Xavier Worthy"
-opponent_team = "BAL"
+# # Example usage
+# qb_name = "Brock Purdy"
+# wr1_name = "Xavier Worthy"
+# wr2_name = "Travis Kelce"
+# wr3_name = "Xavier Worthy"
+# opponent_team = "BAL"
 
-print_player_stats(qb_name, 'QB')
-print_player_stats(wr1_name, 'Any')
-print_player_stats(wr2_name, 'Any')
-print_player_stats(wr3_name, 'Any')
+# print_player_stats(qb_name, 'QB')
+# print_player_stats(wr1_name, 'Any')
+# print_player_stats(wr2_name, 'Any')
+# print_player_stats(wr3_name, 'Any')
 
-print(f"\nDefensive stats for {opponent_team}:")
-defense_stats_print = get_defense_stats(opponent_team)
-for stat, value in defense_stats_print.items():
-    if stat != 'tm':
-        print(f"  {stat}: {value:.2f}")
+# print(f"\nDefensive stats for {opponent_team}:")
+# defense_stats_print = get_defense_stats(opponent_team)
+# for stat, value in defense_stats_print.items():
+#     if stat != 'tm':
+#         print(f"  {stat}: {value:.2f}")
 
-predicted_yards = predict_passing_yards(qb_name, wr1_name, wr2_name, wr3_name, opponent_team)
-print(f"\nPredicted passing yards for {qb_name}: {predicted_yards:.2f}")
+# predicted_yards = predict_passing_yards(qb_name, wr1_name, wr2_name, wr3_name, opponent_team)
+# print(f"\nPredicted passing yards for {qb_name}: {predicted_yards:.2f}")
