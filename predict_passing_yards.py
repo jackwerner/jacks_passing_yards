@@ -75,7 +75,7 @@ scaler = joblib.load('qb_passing_yards_scaler_v2.joblib')
 qb_data_2023 = load_data("player_stats/player_stats_2023.csv")
 qb_data_2024 = load_data("player_stats/player_stats_2024.csv")
 qb_data = pd.concat([qb_data_2023, qb_data_2024])
-qb_data = qb_data[qb_data['position'] == 'QB']
+qb_data = qb_data[(qb_data['position'] == 'QB') & (qb_data['attempts'] >= 15)]
 
 # Create season pass dataset
 season_pass = qb_data.groupby(['player_id', 'season']).agg({
